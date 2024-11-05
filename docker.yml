@@ -1,0 +1,70 @@
+---
+- name: Configuration de base du serveur
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: Ensure apt is using HTTPS
+      ansible.builtin.apt:
+        name: "{{ item }}"
+        state: present
+      loop:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - software-properties-common
+
+    - name: Obtenir l'architecture
+      ansible.builtin.command: uname -m
+      register: architecture_raw
+
+    - name: Convertir l'architecture en "arm" si elle est "aarch64"
+      set_fact:
+        architecture: "arm64"
+      when: architecture_raw.stdout == "aarch64"
+
+    - name: Utiliser directement l'architecture si elle n'est pas "aarch64"
+      set_fact:
+        architecture: "amd64"
+      when: architecture_raw.stdout != "aarch64"
+
+    - debug:
+        msg: "Architecture détectée : {{ architecture }}"
+
+    - name: Ensure /etc/apt/keyrings directory exists
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Add Docker's official GPG key
+      ansible.builtin.shell: |
+        sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+        sudo chmod a+r /etc/apt/keyrings/docker.asc
+      args:
+        creates: /etc/apt/keyrings/docker.asc
+
+    - name: Add Docker repository to Apt sources
+      ansible.builtin.shell: |
+        echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+        $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+        sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+      args:
+        creates: /etc/apt/sources.list.d/docker.list
+
+    - name: Install Docker CE and related packages
+      ansible.builtin.apt:
+        name:
+        - docker-ce
+        - docker-ce-cli
+        - containerd.io
+        - docker-buildx-plugin
+        - docker-compose-plugin
+        state: present
+        update_cache: true
+
+    - name: Ensure Docker service is enabled and running
+      ansible.builtin.systemd:
+        name: docker
+        enabled: true
+        state: started
