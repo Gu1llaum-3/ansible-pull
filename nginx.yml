@@ -1,0 +1,18 @@
+---
+- name: Configuration de base du serveur
+  hosts: localhost
+  become: yes
+  tasks:
+    - name: Mise à jour des paquets apt
+      apt:
+        update_cache: yes
+        upgrade: dist
+
+    - name: Installer les paquets nécessaires
+      apt:
+        name:
+          - curl
+          - vim
+          - git
+          - nginx
+        state: present
